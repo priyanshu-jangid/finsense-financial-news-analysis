@@ -1,7 +1,8 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from backend.app.core.config import settings
+from shared.models import Base
 
 
 engine = create_engine(
@@ -17,10 +18,6 @@ SessionLocal = sessionmaker(
 )
 
 
-class Base(DeclarativeBase):
-    pass
-
-
 def get_db():
     db = SessionLocal()
 
@@ -28,3 +25,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
