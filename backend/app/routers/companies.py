@@ -25,8 +25,13 @@ def create_company_endpoint(
     company_data: CompanyCreate,
     db: Session = Depends(get_db),
 ):
-    return create_company(db, company_data)
-
+    try:
+        return create_company(db, company_data)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
 
 @router.get(
     "",

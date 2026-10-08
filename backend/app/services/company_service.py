@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from shared.models import Company
@@ -15,7 +16,13 @@ def create_company(
     )
 
     db.add(company)
-    db.commit()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("A company with this ticker already exists")
+
     db.refresh(company)
 
     return company
@@ -32,4 +39,3 @@ def get_company(
     return db.query(Company).filter(
         Company.id == company_id
     ).first()
-
