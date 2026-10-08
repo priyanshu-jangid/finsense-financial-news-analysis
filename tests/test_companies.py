@@ -1,51 +1,4 @@
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from backend.app.core.database import get_db
-from backend.app.main import app
-from shared.models import Base
-
-
-TEST_DATABASE_URL = "sqlite://"
-
-engine = create_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-
-TestingSessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False,
-)
-
-
-Base.metadata.create_all(bind=engine)
-
-
-def override_get_db():
-    db = TestingSessionLocal()
-
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-client = TestClient(app)
-
-
-def setup_function():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-
-
-def test_create_company():
+def test_create_company(client):
     response = client.post(
         "/companies",
         json={
@@ -65,7 +18,7 @@ def test_create_company():
     assert data["id"] is not None
 
 
-def test_ticker_is_normalized_to_uppercase():
+def test_ticker_is_normalized_to_uppercase(client):
     response = client.post(
         "/companies",
         json={
@@ -79,7 +32,7 @@ def test_ticker_is_normalized_to_uppercase():
     assert response.json()["ticker"] == "MSFT"
 
 
-def test_list_companies():
+def test_list_companies(client):
     client.post(
         "/companies",
         json={
@@ -109,7 +62,7 @@ def test_list_companies():
     assert data[1]["ticker"] == "MSFT"
 
 
-def test_get_company():
+def test_get_company(client):
     create_response = client.post(
         "/companies",
         json={
@@ -119,6 +72,8 @@ def test_get_company():
         },
     )
 
+    assert create_response.status_code == 201
+
     company_id = create_response.json()["id"]
 
     response = client.get(f"/companies/{company_id}")
@@ -127,14 +82,14 @@ def test_get_company():
     assert response.json()["ticker"] == "NVDA"
 
 
-def test_get_nonexistent_company():
+def test_get_nonexistent_company(client):
     response = client.get("/companies/9999")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Company not found"
 
 
-def test_duplicate_ticker_is_rejected():
+def test_duplicate_ticker_is_rejected(client):
     company = {
         "ticker": "AAPL",
         "name": "Apple Inc.",
@@ -153,6 +108,7 @@ def test_duplicate_ticker_is_rejected():
 
     assert first_response.status_code == 201
     assert second_response.status_code == 409
+
     assert (
         second_response.json()["detail"]
         == "A company with this ticker already exists"

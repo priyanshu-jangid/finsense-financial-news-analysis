@@ -1,16 +1,7 @@
-from fastapi.testclient import TestClient
-
-from backend.app.main import app
 from shared.models import Company, User, Watchlist
-from tests.test_companies import TestingSessionLocal
 
 
-client = TestClient(app)
-
-
-def create_user():
-    db = TestingSessionLocal()
-
+def create_user(db):
     user = User(
         email="test@example.com",
         password_hash="test_hash",
@@ -20,17 +11,10 @@ def create_user():
     db.commit()
     db.refresh(user)
 
-    db.close()
-
     return user.id
 
 
-def create_company(
-    ticker: str,
-    name: str,
-):
-    db = TestingSessionLocal()
-
+def create_company(db, ticker, name):
     company = Company(
         ticker=ticker,
         name=name,
@@ -41,35 +25,20 @@ def create_company(
     db.commit()
     db.refresh(company)
 
-    db.close()
-
     return company.id
 
 
-def setup_function():
-    db = TestingSessionLocal()
-
-    db.query(Watchlist).delete()
-    db.query(Company).delete()
-    db.query(User).delete()
-
-    db.commit()
-    db.close()
-
-
-def test_add_company_to_watchlist():
-
-    user_id = create_user()
+def test_add_company_to_watchlist(client, db):
+    user_id = create_user(db)
     company_id = create_company(
+        db,
         "AAPL",
         "Apple Inc.",
     )
 
     response = client.post(
         f"/users/{user_id}/watchlist",
-        json={
-            "company_id": company_id,
-        },
+        json={"company_id": company_id},
     )
 
     assert response.status_code == 201
@@ -81,16 +50,17 @@ def test_add_company_to_watchlist():
     assert data["id"] is not None
 
 
-def test_list_user_watchlist():
-
-    user_id = create_user()
+def test_list_user_watchlist(client, db):
+    user_id = create_user(db)
 
     apple_id = create_company(
+        db,
         "AAPL",
         "Apple Inc.",
     )
 
     microsoft_id = create_company(
+        db,
         "MSFT",
         "Microsoft Corporation",
     )
@@ -118,11 +88,11 @@ def test_list_user_watchlist():
     assert data[1]["company_id"] == microsoft_id
 
 
-def test_duplicate_company_is_rejected():
-
-    user_id = create_user()
+def test_duplicate_company_is_rejected(client, db):
+    user_id = create_user(db)
 
     company_id = create_company(
+        db,
         "AAPL",
         "Apple Inc.",
     )
@@ -141,9 +111,9 @@ def test_duplicate_company_is_rejected():
     assert second_response.status_code == 409
 
 
-def test_nonexistent_user_is_rejected():
-
+def test_nonexistent_user_is_rejected(client, db):
     company_id = create_company(
+        db,
         "AAPL",
         "Apple Inc.",
     )
@@ -157,9 +127,8 @@ def test_nonexistent_user_is_rejected():
     assert response.json()["detail"] == "User not found"
 
 
-def test_nonexistent_company_is_rejected():
-
-    user_id = create_user()
+def test_nonexistent_company_is_rejected(client, db):
+    user_id = create_user(db)
 
     response = client.post(
         f"/users/{user_id}/watchlist",
@@ -170,11 +139,11 @@ def test_nonexistent_company_is_rejected():
     assert response.json()["detail"] == "Company not found"
 
 
-def test_remove_company_from_watchlist():
-
-    user_id = create_user()
+def test_remove_company_from_watchlist(client, db):
+    user_id = create_user(db)
 
     company_id = create_company(
+        db,
         "AAPL",
         "Apple Inc.",
     )
@@ -198,11 +167,11 @@ def test_remove_company_from_watchlist():
     assert list_response.json() == []
 
 
-def test_remove_nonexistent_watchlist_entry():
-
-    user_id = create_user()
+def test_remove_nonexistent_watchlist_entry(client, db):
+    user_id = create_user(db)
 
     company_id = create_company(
+        db,
         "AAPL",
         "Apple Inc.",
     )
@@ -212,4 +181,3 @@ def test_remove_nonexistent_watchlist_entry():
     )
 
     assert response.status_code == 404
-
