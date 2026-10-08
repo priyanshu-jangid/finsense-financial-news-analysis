@@ -1,10 +1,16 @@
 from fastapi import FastAPI
 
+from backend.app.routers.companies import router as companies_router
+
+
 app = FastAPI(
     title="FinSense API",
     description="Financial News Aggregation and Sentiment Analysis Platform",
     version="0.1.0",
 )
+
+
+app.include_router(companies_router)
 
 
 @app.get("/")
@@ -19,5 +25,5 @@ def root():
 @app.get("/health")
 def health_check():
     return {
-        "status": "healthy"
+        "status": "healthy",
     }
