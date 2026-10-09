@@ -1,19 +1,19 @@
 from typing import Annotated
 
-from fastapi import Depends
-from fastapi.security import OAuth2PasswordRequestForm
-
-from backend.app.core.security import create_access_token, verify_password
-from backend.app.dependencies import get_current_user
-from shared.models import User
-
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
+from backend.app.core.security import create_access_token, verify_password
+from backend.app.dependencies import get_current_user
 from backend.app.schemas.auth import UserRegister, UserResponse
-from backend.app.services.auth_service import register_user
+from backend.app.services.auth_service import (
+    get_user_by_email,
+    register_user,
+)
+from shared.models import User
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -41,6 +41,7 @@ def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists",
         ) from exc
+
 
 
 @router.post("/login")
