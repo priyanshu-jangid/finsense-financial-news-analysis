@@ -1,7 +1,8 @@
+from datetime import UTC, datetime, timedelta
+from jwt.exceptions import InvalidTokenError
 
 import jwt
 from pwdlib import PasswordHash
-
 from backend.app.core.config import settings
 
 
@@ -38,4 +39,13 @@ def create_access_token(subject: str) -> str:
         payload,
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
+    )
+
+def decode_access_token(token: str) -> dict:
+    """Validate and decode a JWT access token."""
+    return jwt.decode(
+        token,
+        settings.JWT_SECRET_KEY,
+        algorithms=[settings.JWT_ALGORITHM],
+        options={"require": ["exp", "sub"]},
     )
