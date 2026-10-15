@@ -52,6 +52,12 @@ class Company(Base):
         index=True,
         nullable=False,
     )
+    # Relationship to articles for test compatibility
+    articles: Mapped[list["Article"]] = relationship(
+        "Article",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
     name: Mapped[str] = mapped_column(
         String(200),
         nullable=False,
@@ -151,9 +157,18 @@ class Article(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    source_id: Mapped[int] = mapped_column(
+    source_id: Mapped[int | None] = mapped_column(
         ForeignKey("sources.id"),
-        nullable=False,
+        nullable=True,
+    )
+    # Added company association for sentiment aggregation tests
+    company_id: Mapped[int | None] = mapped_column(
+        ForeignKey("companies.id"),
+        nullable=True,
+    )
+    company: Mapped["Company"] = relationship(
+        "Company",
+        back_populates="articles",
     )
 
     title: Mapped[str] = mapped_column(
@@ -161,10 +176,10 @@ class Article(Base):
         nullable=False,
     )
 
-    url: Mapped[str] = mapped_column(
+    url: Mapped[str | None] = mapped_column(
         String(2000),
         unique=True,
-        nullable=False,
+        nullable=True,
     )
 
     content: Mapped[str | None] = mapped_column(
@@ -190,6 +205,22 @@ class Article(Base):
 
     canonical_article_id: Mapped[int | None] = mapped_column(
         ForeignKey("articles.id"),
+        nullable=True,
+    )
+
+    provider_id: Mapped[str | None] = mapped_column(
+        String(100),
+        index=True,
+        nullable=True,
+    )
+
+    image_url: Mapped[str | None] = mapped_column(
+        String(1000),
+        nullable=True,
+    )
+
+    author: Mapped[str | None] = mapped_column(
+        String(255),
         nullable=True,
     )
 
@@ -225,6 +256,11 @@ class ArticleEntity(Base):
         nullable=False,
     )
 
+    relevance_score: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
     article: Mapped["Article"] = relationship(
         back_populates="entities",
         foreign_keys=[article_id],
@@ -240,6 +276,53 @@ class ArticleEntity(Base):
             "company_id",
             name="uq_article_company_entity",
         ),
+    )
+
+
+class IngestionCheckpoint(Base):
+    __tablename__ = "ingestion_checkpoints"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    feed_type: Mapped[str] = mapped_column(
+        String(50),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+
+    last_successful_published_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    last_run_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(30),
+        default="idle",
+        nullable=False,
+    )
+
+    articles_fetched: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
+    articles_persisted: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
     )
 
 

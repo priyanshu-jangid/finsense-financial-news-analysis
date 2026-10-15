@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from datetime import date
 
 from backend.app.core.database import get_db
 from backend.app.schemas.company import CompanyCreate, CompanyResponse
@@ -8,6 +9,8 @@ from backend.app.services.company_service import (
     get_companies,
     get_company,
 )
+from backend.app.schemas.company_sentiment import CompanySentimentSummaryResponse
+from backend.app.services.company_sentiment_service import aggregate_company_sentiment
 
 
 router = APIRouter(
@@ -58,5 +61,26 @@ def get_company_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Company not found",
         )
-
     return company
+@router.get(
+    "/{company_id}/sentiment",
+    response_model=CompanySentimentSummaryResponse,
+    summary="Aggregate sentiment for a company",
+)
+def get_company_sentiment(
+    company_id: int,
+    start_date: date | None = Query(default=None, description="Inclusive start date (YYYY-MM-DD)"),
+    end_date: date | None = Query(default=None, description="Inclusive end date (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    """Aggregate sentiment analyses for a company over an optional date range."""
+    company = get_company(db, company_id)
+    if company is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found",
+        )
+    summary = aggregate_company_sentiment(db, company_id, start_date, end_date)
+    return summary
+
+
