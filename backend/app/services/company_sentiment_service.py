@@ -1,18 +1,29 @@
 """Company sentiment aggregation service.
 
-Provides functionality to aggregate persisted SentimentAnalysis records for a given
-company over an optional date range.
+Provides functionality to aggregate persisted ``SentimentAnalysis`` records for a
+given company over an optional date range.
 """
 
-from datetime import datetime, date, UTC
+from datetime import datetime, date, timezone
+
+# Use UTC timezone throughout the module
+UTC = timezone.utc
 from fastapi import HTTPException
 from typing import List, Optional
 
 from pydantic import BaseModel
 from sqlalchemy import select, func
+from backend.app.services.sentiment_service import analyse_and_persist_sentiment
 from sqlalchemy.orm import Session
 
-from shared.models import Company, SentimentAnalysis
+from shared.models import Company, SentimentAnalysis, Article, ArticleEntity
+
+__all__ = [
+    "DailyTrendPoint",
+    "CompanySentimentSummary",
+    "aggregate_company_sentiment",
+    "analyse_pending_articles",
+]
 
 
 class DailyTrendPoint(BaseModel):
@@ -41,13 +52,26 @@ class CompanySentimentSummary(BaseModel):
 
 def _validate_date_range(start: Optional[date], end: Optional[date]) -> None:
     """Validate that start is not after end.
-    Raises ValueError if the range is invalid.
+    
+    Raises
+    ------
+    ValueError
+        If start date is after end date.
     """
     if start and end and start > end:
         raise ValueError("start_date must be before or equal to end_date")
 
 
 def _company_exists(db: Session, company_id: int) -> bool:
+    """Return ``True`` iff a company with the given primary key exists.
+    
+    Parameters
+    ----------
+    db:
+        SQLAlchemy session.
+    company_id:
+        Primary key of the company to check.
+    """
     return db.query(Company.id).filter(Company.id == company_id).scalar() is not None
 
 
@@ -71,6 +95,7 @@ def aggregate_company_sentiment(
     if not _company_exists(db, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
 
+    # Validate date range; convert ValueError to 500 for compatibility with existing tests.
     try:
         _validate_date_range(start_date, end_date)
     except ValueError as ve:
@@ -121,3 +146,43 @@ def aggregate_company_sentiment(
         average_score=average_score,
         daily_trend=daily_trend,
     )
+def analyse_pending_articles(db: Session, company_id: int, *, engine: SentimentEngine | None = None) -> int:
+    """Run sentiment analysis on all pending articles for a company.
+
+    Returns the number of newly created ``SentimentAnalysis`` rows.
+    """
+    # Ensure company exists
+    if not _company_exists(db, company_id):
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # All article IDs linked to the company via ArticleEntity
+    linked_article_ids_subq = select(ArticleEntity.article_id).where(ArticleEntity.company_id == company_id)
+
+    # Article IDs that already have sentiment analysis for this company
+    existing_article_ids = (
+        db.query(SentimentAnalysis.article_id)
+        .filter(
+            SentimentAnalysis.article_id.in_(linked_article_ids_subq),
+            SentimentAnalysis.company_id == company_id,
+        )
+        .distinct()
+        .all()
+    )
+    existing_ids = {row[0] for row in existing_article_ids}
+
+    # Candidate article IDs
+    candidate_ids = (
+        db.query(Article.id)
+        .filter(Article.id.in_(linked_article_ids_subq))
+        .all()
+    )
+    candidate_ids = {row[0] for row in candidate_ids}
+
+    pending_ids = candidate_ids - existing_ids
+
+    created = 0
+    for article_id in pending_ids:
+        # Pass the optional engine to preserve test monkeypatches
+        analyse_and_persist_sentiment(db, article_id, company_id, engine=engine)
+        created += 1
+    return created

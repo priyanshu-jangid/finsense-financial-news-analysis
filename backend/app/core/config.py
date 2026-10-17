@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     ENABLE_LIVE_NEWS: bool = False
     # Deprecated alias kept for backward compatibility
     ENABLE_REAL_NEWS: bool = False
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+
 
     model_config = SettingsConfigDict(
         env_file=".env",

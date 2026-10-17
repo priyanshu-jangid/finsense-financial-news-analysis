@@ -1,13 +1,105 @@
-'''Sentiment analysis service layer.
+"""Sentiment analysis service layer.
 
-Provides a function to analyse an article for a specific company using the
-existing :class:`nlp.pipeline.sentiment.SentimentEngine`. The result is stored
-in the ``SentimentAnalysis`` table and returned to callers.
-'''\n\nfrom __future__ import annotations\n\nfrom sqlalchemy.orm import Session\n\nfrom nlp.pipeline.sentiment import SentimentEngine\nfrom shared.models import Article, Company, SentimentAnalysis, ArticleEntity\n\n# Allowed sentiment labels – matches the engine output after normalisation\n_ALLOWED_LABELS = {"positive", "neutral", "negative"}\n\ndef _validate_engine_output(result: dict) -> None:\n    """Validate keys and value ranges from ``SentimentEngine.analyze``.
-\n    Raises ``ValueError`` if anything is out of the expected domain.  The
-    service code catches this and surfaces a HTTP 500 to the client – we do not
-    fabricate a result.
-    """\n    label = result.get("label")\n    score = result.get("score")\n    confidence = result.get("confidence")\n    model_used = result.get("model_used")\n\n    if label not in _ALLOWED_LABELS:\n        raise ValueError(f"Unexpected sentiment label: {label}")\n    if not isinstance(score, (int, float)) or not -1.0 <= score <= 1.0:\n        raise ValueError(f"Score out of bounds: {score}")\n    if not isinstance(confidence, (int, float)) or not 0.0 <= confidence <= 1.0:\n        raise ValueError(f"Confidence out of bounds: {confidence}")\n    if not isinstance(model_used, str) or not model_used:\n        raise ValueError("model_used must be a non‑empty string")\n\ndef _article_company_association_exists(db: Session, article_id: int, company_id: int) -> bool:\n    """Return ``True`` iff the article is linked to the company via an
-    ``ArticleEntity`` row.
-    """\n    stmt = (\n        db.query(ArticleEntity)\n        .filter(ArticleEntity.article_id == article_id, ArticleEntity.company_id == company_id)\n        .exists()\n    )\n    return db.query(stmt).scalar()\n\ndef analyse_and_persist_sentiment(\n    db: Session, article_id: int, company_id: int, *, engine: SentimentEngine | None = None\n) -> SentimentAnalysis:\n    """Analyse *article* for *company* and persist the result.
-\n    The function is idempotent – if a ``SentimentAnalysis`` with the same\n    ``article_id``, ``company_id`` and ``model_used`` already exists, it is\n    returned without creating a new row.  This check is performed at the\n    service‑layer; concurrent requests could still race and create duplicates –\n    a unique DB constraint would be required for a guarantee.\n\n    Parameters\n    ----------\n    db:\n        SQLAlchemy session.\n    article_id:\n        Primary key of the target :class:`shared.models.Article`.\n    company_id:\n        Primary key of the target :class:`shared.models.Company`.\n    engine:\n        Optional pre‑constructed ``SentimentEngine`` (useful for testing).\n\n    Returns\n    -------\n    SentimentAnalysis\n        The persisted (or previously existing) sentiment record.\n\n    Raises\n    ------\n    ValueError\n        If the article/company does not exist, is not linked, or the engine\n        returns malformed data.\n    RuntimeError\n        Propagated from the underlying engine when inference fails.\n    """\n    # Resolve article & company – raise early if missing.\n    article = db.get(Article, article_id)\n    if article is None:\n        raise ValueError(f"Article {article_id} not found")\n\n    company = db.get(Company, company_id)\n    if company is None:\n        raise ValueError(f"Company {company_id} not found")\n\n    # Verify association via ArticleEntity\n    if not _article_company_association_exists(db, article_id, company_id):\n        raise ValueError(\n            f"Company {company_id} is not associated with Article {article_id}"\n        )\n\n    # Build the text to feed the model – title plus optional content.\n    text_parts = [article.title]\n    if article.content:\n        text_parts.append(article.content)\n    text = "\n\n".join(text_parts).strip()\n\n    # Run the sentiment engine.\n    if engine is None:\n        engine = SentimentEngine()\n    result = engine.analyze(text)\n    _validate_engine_output(result)\n\n    # Idempotent persistence – look for an existing row first.\n    existing = (\n        db.query(SentimentAnalysis)\n        .filter(\n            SentimentAnalysis.article_id == article_id,\n            SentimentAnalysis.company_id == company_id,\n            SentimentAnalysis.model_used == result["model_used"],\n        )\n        .first()\n    )\n    if existing:\n        return existing\n\n    # Create a new record.\n    sentiment = SentimentAnalysis(\n        article_id=article_id,\n        company_id=company_id,\n        label=result["label"],\n        score=result["score"],\n        confidence=result["confidence"],\n        model_used=result["model_used"],\n    )\n    db.add(sentiment)\n    db.flush()  # Assign an ID without committing – caller may commit later.\n    return sentiment\n
+Provides a function to analyse an article for a specific company using the existing
+:class:`nlp.pipeline.sentiment.SentimentEngine`. The result is stored in the
+``SentimentAnalysis`` table and returned to callers.
+"""
+
+from __future__ import annotations
+
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+
+# Import SentimentEngine lazily inside function to respect monkeypatches
+from shared.models import Article, Company, SentimentAnalysis, ArticleEntity
+
+_ALLOWED_LABELS = {"positive", "neutral", "negative"}
+
+def _validate_engine_output(result: dict) -> None:
+    """Validate keys and value ranges from ``SentimentEngine.analyze``.
+
+    Raises ``ValueError`` if any data is outside expected domains.
+    """
+    label = result.get("label")
+    score = result.get("score")
+    confidence = result.get("confidence")
+    model_used = result.get("model_used")
+
+    if label not in _ALLOWED_LABELS:
+        raise ValueError(f"Unexpected sentiment label: {label}")
+    if not isinstance(score, (int, float)) or not -1.0 <= score <= 1.0:
+        raise ValueError(f"Score out of bounds: {score}")
+    if not isinstance(confidence, (int, float)) or not 0.0 <= confidence <= 1.0:
+        raise ValueError(f"Confidence out of bounds: {confidence}")
+    if not isinstance(model_used, str) or not model_used:
+        raise ValueError("model_used must be a non-empty string")
+
+def _article_company_association_exists(db: Session, article_id: int, company_id: int) -> bool:
+    """Return True if the article is linked to the company via an ``ArticleEntity`` row."""
+    stmt = (
+        db.query(ArticleEntity)
+        .filter(ArticleEntity.article_id == article_id, ArticleEntity.company_id == company_id)
+        .exists()
+    )
+    return db.query(stmt).scalar()
+
+def analyse_and_persist_sentiment(
+    db: Session, article_id: int, company_id: int, *, engine: SentimentEngine | None = None
+) -> SentimentAnalysis:
+    """Analyse an article for a company and persist the result.
+
+    Idempotent: returns existing ``SentimentAnalysis`` if one with the same article,
+    company and model_used already exists.
+    """
+    article = db.get(Article, article_id)
+    if article is None:
+        raise ValueError(f"Article {article_id} not found")
+    company = db.get(Company, company_id)
+    if company is None:
+        raise ValueError(f"Company {company_id} not found")
+    if not _article_company_association_exists(db, article_id, company_id):
+        raise ValueError(f"Company {company_id} is not associated with Article {article_id}")
+
+    text_parts = [article.title]
+    if article.content:
+        text_parts.append(article.content)
+    text = "\n\n".join(text_parts).strip()
+
+    if engine is None:
+        # Dynamically import SentimentEngine each call to honour monkeypatches
+        try:
+            import importlib
+            sentiment_mod = importlib.import_module("nlp.pipeline.sentiment")
+            EngineClass = getattr(sentiment_mod, "SentimentEngine")
+            engine = EngineClass()
+        except Exception as exc:
+            # In production, fail fast if the engine cannot be loaded
+            raise RuntimeError("Failed to load SentimentEngine") from exc
+
+    # Run analysis; let any exception propagate to be handled by caller
+    result = engine.analyze(text)
+    _validate_engine_output(result)
+
+    existing = (
+        db.query(SentimentAnalysis)
+        .filter(
+            SentimentAnalysis.article_id == article_id,
+            SentimentAnalysis.company_id == company_id,
+            SentimentAnalysis.model_used == result["model_used"],
+        )
+        .first()
+    )
+    if existing:
+        return existing
+
+    sentiment = SentimentAnalysis(
+        article_id=article_id,
+        company_id=company_id,
+        label=result["label"],
+        score=result["score"],
+        confidence=result["confidence"],
+        model_used=result["model_used"],
+    )
+    db.add(sentiment)
+    db.flush()
+    return sentiment

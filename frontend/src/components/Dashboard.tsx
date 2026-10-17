@@ -109,16 +109,17 @@ const Dashboard = () => {
       {error && <p className="text-red-600 mb-2">{error}</p>}
       {summary && (
         <div className="summary grid grid-cols-2 gap-4 mb-6">
-          <div>Total Analyses: {summary.total_analyses}</div>
-          <div>Positive: {summary.positive_count}</div>
-          <div>Neutral: {summary.neutral_count}</div>
-          <div>Negative: {summary.negative_count}</div>
-          <div>
-            Avg Score:{' '}
-            {summary.average_score !== null && summary.average_score !== undefined
-              ? summary.average_score.toFixed(2)
-              : 'N/A'}
-          </div>
+          {[
+            { label: 'Total Analyses', value: summary.total_analyses },
+            { label: 'Positive', value: summary.positive_count },
+            { label: 'Neutral', value: summary.neutral_count },
+            { label: 'Negative', value: summary.negative_count },
+            { label: 'Avg Score', value: summary.average_score !== null && summary.average_score !== undefined ? summary.average_score.toFixed(2) : 'N/A' },
+          ].map((item, idx) => (
+            <div key={item.label} className="fade-in" style={{ '--i': idx + 1 } as React.CSSProperties}>
+              {item.label}: {item.value}
+            </div>
+          ))}
         </div>
       )}
       {renderChart()}

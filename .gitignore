@@ -22,3 +22,12 @@ Thumbs.db
 # Logs
 
 *.log
+
+# Additional ignores for this project
+.venv/
+node_modules/
+frontend/dist/
+.pytest_cache/
+*.bak
+finsense.db
+frontend/.env.local
