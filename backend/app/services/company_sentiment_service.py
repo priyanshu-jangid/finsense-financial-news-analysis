@@ -9,11 +9,12 @@ from datetime import datetime, date, timezone
 # Use UTC timezone throughout the module
 UTC = timezone.utc
 from fastapi import HTTPException
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from backend.app.services.sentiment_service import analyse_and_persist_sentiment
+from backend.app.services.sentiment_engine import get_sentiment_engine
 from sqlalchemy.orm import Session
 
 from shared.models import Company, SentimentAnalysis, Article, ArticleEntity
@@ -146,11 +147,14 @@ def aggregate_company_sentiment(
         average_score=average_score,
         daily_trend=daily_trend,
     )
-def analyse_pending_articles(db: Session, company_id: int, *, engine: SentimentEngine | None = None) -> int:
+def analyse_pending_articles(db: Session, company_id: int, *, engine: Any = None) -> int:
     """Run sentiment analysis on all pending articles for a company.
 
     Returns the number of newly created ``SentimentAnalysis`` rows.
     """
+    # Ensure a single engine instance per job run
+    if engine is None:
+        engine = get_sentiment_engine()
     # Ensure company exists
     if not _company_exists(db, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
@@ -182,7 +186,7 @@ def analyse_pending_articles(db: Session, company_id: int, *, engine: SentimentE
 
     created = 0
     for article_id in pending_ids:
-        # Pass the optional engine to preserve test monkeypatches
+        # Pass the shared engine to preserve test monkeypatches
         analyse_and_persist_sentiment(db, article_id, company_id, engine=engine)
         created += 1
     return created

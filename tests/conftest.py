@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from backend.app.core.database import get_db
 from backend.app.main import app
 from shared.models import Base
+from backend.app.services.sentiment_engine import reset_sentiment_engine
 
 
 TEST_DATABASE_URL = "sqlite://"
@@ -52,3 +53,10 @@ def client(db):
         yield test_client
 
     app.dependency_overrides.clear()
+
+@pytest.fixture(autouse=True)
+def reset_engine_fixture():
+    """Reset the sentiment engine cache before and after each test."""
+    reset_sentiment_engine()
+    yield
+    reset_sentiment_engine()

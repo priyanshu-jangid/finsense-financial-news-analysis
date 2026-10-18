@@ -37,9 +37,11 @@ def test_trigger_sentiment_analysis_200_with_token_and_mock_engine(client, db, m
 
     # Mock SentimentEngine used inside service
     class MockEngine:
+        def __init__(self, model_name=None):
+            pass
         def analyze(self, text):
             return {"label": "positive", "score": 0.9, "confidence": 0.95, "model_used": "mock-model"}
-    monkeypatch.setattr("nlp.pipeline.sentiment.SentimentEngine", MockEngine)
+    monkeypatch.setattr("backend.app.services.sentiment_engine.SentimentEngine", MockEngine)
 
     response = client.post(
         f"/companies/{company.id}/sentiment/analyze",

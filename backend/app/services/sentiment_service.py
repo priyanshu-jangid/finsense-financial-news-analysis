@@ -100,6 +100,22 @@ def analyse_and_persist_sentiment(
         confidence=result["confidence"],
         model_used=result["model_used"],
     )
-    db.add(sentiment)
-    db.flush()
-    return sentiment
+    try:
+        # Use a savepoint to handle possible unique constraint violations
+        with db.begin_nested():
+            db.add(sentiment)
+            db.flush()
+            return sentiment
+    except IntegrityError:
+        # Roll back the savepoint and fetch the existing record
+        db.rollback()
+        existing = (
+            db.query(SentimentAnalysis)
+            .filter(
+                SentimentAnalysis.article_id == article_id,
+                SentimentAnalysis.company_id == company_id,
+                SentimentAnalysis.model_used == result["model_used"],
+            )
+            .first()
+        )
+        return existing

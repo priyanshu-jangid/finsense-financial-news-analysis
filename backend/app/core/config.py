@@ -18,8 +18,7 @@ class Settings(BaseSettings):
     ENABLE_SCHEDULER: bool = True
     # Canonical kill switch – defaults to False to protect quota
     ENABLE_LIVE_NEWS: bool = False
-    # Deprecated alias kept for backward compatibility
-    ENABLE_REAL_NEWS: bool = False
+    FINBERT_MODEL_NAME: str = "ProsusAI/finbert"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
 

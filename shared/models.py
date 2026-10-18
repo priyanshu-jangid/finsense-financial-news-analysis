@@ -329,7 +329,7 @@ class IngestionCheckpoint(Base):
 class SentimentAnalysis(Base):
     __tablename__ = "sentiment_analyses"
     # Unique constraint removed to allow multiple sentiment records per article/company/model
-    __table_args__ = ()
+    __table_args__ = (UniqueConstraint("article_id", "company_id", "model_used", name="uq_sentiment_article_company_model"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
