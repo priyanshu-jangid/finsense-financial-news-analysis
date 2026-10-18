@@ -6,7 +6,7 @@ def test_get_sentiment_engine_success(monkeypatch):
     class DummyEngine:
         def __init__(self, model_name=None):
             self.model_name = model_name
-    monkeypatch.setattr('nlp.pipeline.sentiment.SentimentEngine', DummyEngine)
+    monkeypatch.setattr('backend.app.services.sentiment_engine.SentimentEngine', DummyEngine)
     reset_sentiment_engine()
     engine = get_sentiment_engine()
     assert isinstance(engine, DummyEngine)
@@ -17,7 +17,7 @@ def test_get_sentiment_engine_failure(monkeypatch):
     """Engine creation should raise RuntimeError when underlying import fails."""
     def raise_err(*args, **kwargs):
         raise ImportError('Engine not available')
-    monkeypatch.setattr('nlp.pipeline.sentiment.SentimentEngine', raise_err)
+    monkeypatch.setattr('backend.app.services.sentiment_engine.SentimentEngine', raise_err)
     reset_sentiment_engine()
     with pytest.raises(RuntimeError):
         get_sentiment_engine()

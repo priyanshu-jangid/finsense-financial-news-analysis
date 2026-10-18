@@ -153,7 +153,7 @@ def test_trigger_sentiment_analysis_503_engine_failure(client, db, monkeypatch):
     # Patch SentimentEngine to raise ImportError
     def raise_import_error(*args, **kwargs):
         raise ImportError("Engine not available")
-    monkeypatch.setattr("nlp.pipeline.sentiment.SentimentEngine", raise_import_error)
+    monkeypatch.setattr("backend.app.services.sentiment_engine.SentimentEngine", raise_import_error)
 
     response = client.post(
         f"/companies/{company.id}/sentiment/analyze",
