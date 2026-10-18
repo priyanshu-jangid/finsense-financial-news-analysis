@@ -19,6 +19,9 @@ def create_article(db, company_id: int, title: str = "Test", content: str = "con
     db.flush()
     return article
 
+import itertools
+_model_counter = itertools.count(1)
+
 # Helper to create a SentimentAnalysis record
 
 def create_sentiment(db, article_id: int, company_id: int, label: str, score: float, created_at: datetime):
@@ -28,7 +31,7 @@ def create_sentiment(db, article_id: int, company_id: int, label: str, score: fl
         label=label,
         score=score,
         confidence=0.99,
-        model_used="mock-model",
+        model_used=f"mock-model-{next(_model_counter)}",
         created_at=created_at,
     )
     db.add(sentiment)
