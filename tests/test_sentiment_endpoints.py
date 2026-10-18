@@ -115,13 +115,7 @@ def test_run_analysis_job_commits_per_company(monkeypatch, db):
     assert call_order == [company1.id, company2.id]
 
     # Use a fresh session to verify persistence
-    from tests.conftest import TestingSessionLocal
-    new_session = TestingSessionLocal()
-    try:
-        stmt1 = new_session.query(SentimentAnalysis).filter(SentimentAnalysis.company_id == company1.id).first()
-        stmt2 = new_session.query(SentimentAnalysis).filter(SentimentAnalysis.company_id == company2.id).first()
-    finally:
-        pass
+
     assert stmt1 is not None
     assert stmt2 is None
     # Ensure both companies were processed

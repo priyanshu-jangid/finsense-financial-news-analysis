@@ -134,11 +134,21 @@ class SentimentEngine:
         best = max(raw_outputs, key=lambda r: r.get("score", 0))
         raw_label = str(best.get("label", "NEUTRAL")).lower()
         raw_score = float(best.get("score", 0.0))
-
+        raw_confidence = float(best.get("confidence", raw_score))
+        model_used = best.get("model_used", self.model_used)
+        # Validate output fields
+        if raw_label not in {"positive", "negative", "neutral"}:
+            raise ValueError(f"Unexpected sentiment label: {raw_label}")
+        if not (0.0 <= raw_score <= 1.0):
+            raise ValueError(f"Score out of bounds: {raw_score}")
+        if not (0.0 <= raw_confidence <= 1.0):
+            raise ValueError(f"Confidence out of bounds: {raw_confidence}")
+        if not isinstance(model_used, str) or not model_used:
+            raise ValueError("model_used must be a non-empty string")
         # Map possible variant labels to the three canonical ones.
         if "positive" in raw_label:
             label = "positive"
-            signed_score = min(max(raw_score, 0.0), 1.0)  # ensure bounds
+            signed_score = min(max(raw_score, 0.0), 1.0)
         elif "negative" in raw_label:
             label = "negative"
             signed_score = -min(max(raw_score, 0.0), 1.0)
@@ -146,13 +156,13 @@ class SentimentEngine:
             label = "neutral"
             signed_score = 0.0
 
-        confidence = min(max(raw_score, 0.0), 1.0)
+        confidence = min(max(raw_confidence, 0.0), 1.0)
 
         return {
             "label": label,
             "score": signed_score,
             "confidence": confidence,
-            "model_used": self.model_used,
+            "model_used": model_used,
         }
 
     # The following method is for testing purposes – it allows injection of a
