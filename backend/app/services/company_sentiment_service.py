@@ -96,11 +96,11 @@ def aggregate_company_sentiment(
     if not _company_exists(db, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Validate date range; convert ValueError to 500 for compatibility with existing tests.
+    # Validate date range; return 422 for invalid range per new requirement.
     try:
         _validate_date_range(start_date, end_date)
     except ValueError as ve:
-        raise HTTPException(status_code=500, detail=str(ve))
+        raise HTTPException(status_code=422, detail=str(ve))
 
     # Base query for SentimentAnalysis filtered by company and optional dates.
     stmt = select(SentimentAnalysis).where(SentimentAnalysis.company_id == company_id)

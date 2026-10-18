@@ -112,14 +112,14 @@ def test_sentiment_aggregation_unknown_company_returns_404(client: TestClient, d
     assert response.status_code == 404
     assert response.json()["detail"] == "Company not found"
 
-def test_sentiment_aggregation_invalid_date_range_returns_500(client: TestClient, db):
+def test_sentiment_aggregation_invalid_date_range_returns_422(client: TestClient, db):
     comp = create_company(db, "DDD", "Delta Co")
     db.commit()
-    # start > end should trigger ValueError -> 500 response
+    # start > end should trigger ValueError -> 422 response
     response = client.get(
         f"/companies/{comp.id}/sentiment?start_date=2023-01-10&end_date=2023-01-01"
     )
-    assert response.status_code == 500
+    assert response.status_code == 422
 
 def test_get_company_endpoint_still_works(client: TestClient, db):
     comp = create_company(db, "EEE", "Epsilon Co")
