@@ -1,5 +1,5 @@
 """Tests for news article retrieval, filtering, pagination, and ingestion API endpoints."""
-
+from backend.app.core.config import settings
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 import pytest
@@ -140,7 +140,12 @@ def test_manual_ingestion_requires_authentication(client):
     assert response.status_code == 401
 
 
-def test_manual_ingestion_authenticated_success(client, auth_headers):
+def test_manual_ingestion_authenticated_success(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "INGESTION_OPERATOR_EMAILS",
+        "analyst@finsense.com",
+    )
     mock_response = {
         "data": [
             {
@@ -161,6 +166,24 @@ def test_manual_ingestion_authenticated_success(client, auth_headers):
         assert data["status"] in ("success", "partial_failure")
         assert data["broad_feed"]["articles_persisted"] == 1
 
+def test_manual_ingestion_forbidden_for_non_operator(
+    client, auth_headers, monkeypatch
+):
+    monkeypatch.setattr(
+        settings,
+        "INGESTION_OPERATOR_EMAILS",
+        "authorized@example.com",
+    )
+
+    response = client.post(
+        "/articles/ingest",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "User not authorized to trigger ingestion"
+    )
 
 def test_ingestion_status_endpoint(client, db):
     cp = IngestionCheckpoint(

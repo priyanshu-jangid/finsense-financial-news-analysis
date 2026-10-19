@@ -5,7 +5,6 @@ import type { Company, CompanySentimentSummary } from '../types';
 export const fetchCompanies = async (): Promise<Company[]> => {
   const response = await api.get('/companies');
   const data = response.data;
-  // Backend may return an array directly or an object containing the array under a key.
   if (Array.isArray(data)) {
     return data as Company[];
   }
@@ -17,8 +16,12 @@ export const fetchCompanies = async (): Promise<Company[]> => {
   ) {
     return (data as Record<string, unknown>)['companies'] as Company[];
   }
-  // Fallback to empty list to avoid runtime errors.
   return [];
+};
+
+export const fetchCompanyById = async (companyId: number): Promise<Company> => {
+  const response = await api.get<Company>(`/companies/${companyId}`);
+  return response.data;
 };
 
 export const fetchCompanySentiment = async (
@@ -32,6 +35,15 @@ export const fetchCompanySentiment = async (
   const response = await api.get<CompanySentimentSummary>(
     `/companies/${companyId}/sentiment`,
     { params }
+  );
+  return response.data;
+};
+
+export const triggerCompanySentimentAnalysis = async (
+  companyId: number
+): Promise<{ created: number }> => {
+  const response = await api.post<{ created: number }>(
+    `/companies/${companyId}/sentiment/analyze`
   );
   return response.data;
 };

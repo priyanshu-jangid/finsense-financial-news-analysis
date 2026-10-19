@@ -122,6 +122,12 @@ def trigger_news_ingestion(
     Returns 503 Service Unavailable when live news ingestion is disabled.
     """
 
+    # Operator allowlist enforcement
+    from backend.app.core.config import settings
+    allowed_emails = [e.strip().lower() for e in settings.INGESTION_OPERATOR_EMAILS.split(',') if e.strip()]
+    if not allowed_emails or current_user.email.lower() not in allowed_emails:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not authorized to trigger ingestion")
+
     service = NewsIngestionService()
     result = service.ingest_all(db)
 

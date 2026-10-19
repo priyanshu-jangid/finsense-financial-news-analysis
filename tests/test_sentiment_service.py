@@ -30,6 +30,40 @@ def test_persist_valid_result(db):
     assert sentiment.confidence == 0.9
     assert sentiment.model_used == "mock-model"
 
+def test_summary_is_used_when_article_content_is_missing(db):
+    company = Company(ticker="SUM", name="Summary Co", sector="Tech")
+    article = Article(
+        title="Company announces quarterly results",
+        content=None,
+        summary="Revenue increased while operating costs declined.",
+    )
+    db.add_all([company, article])
+    db.commit()
+    db.refresh(company)
+    db.refresh(article)
+    db.add(ArticleEntity(article_id=article.id, company_id=company.id))
+    db.commit()
+
+    class CapturingEngine(DummyEngine):
+        def analyze(self, text):
+            self.received_text = text
+            return self.result
+
+    engine = CapturingEngine({
+        "label": "positive",
+        "score": 0.8,
+        "confidence": 0.9,
+        "model_used": "mock-model",
+    })
+
+    analyse_and_persist_sentiment(db, article.id, company.id, engine=engine)
+
+    assert engine.received_text == (
+        "Company announces quarterly results\n\n"
+        "Revenue increased while operating costs declined."
+    )
+
+
 def test_idempotent_persistence(db):
     company, article = create_company_article(db)
     engine = DummyEngine({"label": "positive", "score": 0.8, "confidence": 0.9, "model_used": "mock-model"})

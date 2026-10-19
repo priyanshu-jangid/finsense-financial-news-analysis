@@ -37,6 +37,7 @@ def get_current_user(
 
     user = db.get(User, user_id)
     if user is None:
+        # If the user does not exist, treat as invalid credentials
         raise credentials_exception
 
     return user

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
         "http://localhost:5174,"
         "http://127.0.0.1:5174"
     )
+    # Comma-separated list of operator emails allowed to trigger manual ingestion
+    INGESTION_OPERATOR_EMAILS: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

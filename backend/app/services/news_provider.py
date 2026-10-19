@@ -96,11 +96,13 @@ class MarketauxClient:
 
         owns_client = self._client is None
         http_client = self._get_client()
-        url = f"{self.base_url}/news"
-        sanitized = self._sanitize_params_for_logging(request_params)
+        url = f"{self.base_url}/news/all"
+        params = {**request_params, "api_token": self.api_token}
+        sanitized = self._sanitize_params_for_logging(params)
         logger.debug("Fetching Marketaux news with params: %s", sanitized)
+
         try:
-            response = http_client.get(url, params=request_params)
+            response = http_client.get(url, params=params)
         except (httpx.TimeoutException, TimeoutError) as exc:
             logger.warning("Marketaux request timed out after %.1f seconds", self.timeout)
             raise ProviderTimeoutError(
@@ -138,7 +140,7 @@ class MarketauxClient:
             logger.error("Marketaux returned logical error: %s", err_msg)
             raise NewsProviderError(f"Marketaux API error: {err_msg}")
         return data
-        url = f"{self.base_url}/news"
+        url = f"{self.base_url}/news/all"
         # Log sanitized params to avoid leaking secrets.
         sanitized = self._sanitize_params_for_logging(request_params)
         logger.debug("Fetching Marketaux news with params: %s", sanitized)

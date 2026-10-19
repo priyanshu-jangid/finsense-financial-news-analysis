@@ -60,10 +60,13 @@ def analyse_and_persist_sentiment(
     if not _article_company_association_exists(db, article_id, company_id):
         raise ValueError(f"Company {company_id} is not associated with Article {article_id}")
 
+    # Prefer stored article content; use the provider summary when content
+    # is unavailable. Ingested articles intentionally may have no full body.
     text_parts = [article.title]
-    if article.content:
-        text_parts.append(article.content)
-    text = "\n\n".join(text_parts).strip()
+    article_text = article.content or article.summary
+    if article_text and article_text.strip():
+        text_parts.append(article_text.strip())
+    text = "\n\n".join(part.strip() for part in text_parts if part and part.strip())
 
     if engine is None:
         # Dynamically import SentimentEngine each call to honour monkeypatches

@@ -11,7 +11,7 @@ UTC = timezone.utc
 from fastapi import HTTPException
 from typing import List, Optional, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select, func
 from backend.app.services.sentiment_service import analyse_and_persist_sentiment
 from backend.app.services.sentiment_engine import get_sentiment_engine
@@ -32,8 +32,7 @@ class DailyTrendPoint(BaseModel):
     count: int
     average_score: Optional[float] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CompanySentimentSummary(BaseModel):
@@ -47,8 +46,7 @@ class CompanySentimentSummary(BaseModel):
     average_score: Optional[float] = None
     daily_trend: List[DailyTrendPoint] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 def _validate_date_range(start: Optional[date], end: Optional[date]) -> None:
