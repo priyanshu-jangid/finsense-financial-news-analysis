@@ -6,6 +6,10 @@ from backend.app.schemas.watchlist import (
     WatchlistCreate,
     WatchlistResponse,
 )
+from backend.app.schemas.watchlist_overview import WatchlistOverviewResponse
+from backend.app.services.watchlist_overview_service import (
+    get_watchlist_overview,
+)
 from backend.app.services.watchlist_service import (
     add_to_watchlist,
     get_user_watchlist,
@@ -86,6 +90,24 @@ def list_user_watchlist(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         )
+
+
+@router.get(
+    "/overview",
+    response_model=WatchlistOverviewResponse,
+)
+def get_user_watchlist_overview(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Ownership check
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot view another user's watchlist overview",
+        )
+    return get_watchlist_overview(db, user_id)
 
 
 @router.delete(
