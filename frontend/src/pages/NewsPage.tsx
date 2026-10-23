@@ -112,13 +112,68 @@ export const NewsPage: React.FC = () => {
     loadArticles(1);
   };
 
+  const pollRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const clearPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const startPolling = () => {
+    if (pollRef.current) return; // already polling
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await fetchIngestionStatus();
+        setIngestionStatus(status);
+        const jobStatus = status.manual_job_status;
+        if (jobStatus === 'success' || jobStatus === 'partial_failure' || jobStatus === 'failure') {
+          clearPolling();
+          if (jobStatus === 'success') {
+            setIngestNotice({
+              message: `Ingestion completed successfully: ${status.manual_job_total_persisted ?? 0} articles stored.`,
+              type: 'success',
+            });
+          } else if (jobStatus === 'partial_failure') {
+            setIngestNotice({
+              message: `Ingestion completed with errors: ${status.manual_job_errors?.join('; ') ?? 'some issues occurred.'}`,
+              type: 'warning',
+            });
+          } else {
+            setIngestNotice({
+              message: `Ingestion failed: ${status.manual_job_errors?.join('; ') ?? 'unknown error.'}`,
+              type: 'warning',
+            });
+          }
+          loadArticles(1);
+        }
+      } catch (e) {
+        clearPolling();
+      }
+    }, 3000);
+  };
+
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      clearPolling();
+    };
+  }, []);
+
   const handleTriggerIngestion = async () => {
     if (!isAuthenticated) return;
     setIngesting(true);
     setIngestNotice(null);
     try {
       const res = await triggerNewsIngestion();
-      if (res.status === 'success' && (res.total_persisted as number) > 0) {
+      if (res.status === 'queued') {
+        startPolling();
+        setIngestNotice({
+          message: 'Ingestion job queued, processing in background.',
+          type: 'success',
+        });
+      } else if (res.status === 'success' && (res.total_persisted as number) > 0) {
         setIngestNotice({
           message: `Ingestion completed: ${res.total_persisted} new articles stored.`,
           type: 'success',

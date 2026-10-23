@@ -161,10 +161,11 @@ def test_manual_ingestion_authenticated_success(client, auth_headers, monkeypatc
     with patch.object(MarketauxClient, "get_company_news", return_value={"data": []}), \
          patch.object(MarketauxClient, "get_broad_news", return_value=mock_response):
         response = client.post("/articles/ingest", headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 202
         data = response.json()
-        assert data["status"] in ("success", "partial_failure")
-        assert data["broad_feed"]["articles_persisted"] == 1
+        assert data["status"] == "queued"
+        # No articles persisted yet; background job will handle later
+        assert data["broad_feed"]["articles_persisted"] == 0
 
 def test_manual_ingestion_forbidden_for_non_operator(
     client, auth_headers, monkeypatch

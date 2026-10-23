@@ -299,8 +299,29 @@ export const WatchlistPage: React.FC = () => {
                       </span>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {company.name}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '8px',
+                        }}
+                      >
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {company.name}
+                        </span>
+                        {company.is_sp500 && (
+                          <span
+                            className="fin-badge"
+                            title="Member of the S&P 500 index"
+                            style={{
+                              fontSize: '10px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            S&P 500
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td>

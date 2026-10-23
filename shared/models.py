@@ -1,6 +1,7 @@
 from datetime import datetime, UTC
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -65,6 +66,14 @@ class Company(Base):
     sector: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
+    )
+
+    is_sp500: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        nullable=False,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

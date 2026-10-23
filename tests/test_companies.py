@@ -113,3 +113,47 @@ def test_duplicate_ticker_is_rejected(client):
         second_response.json()["detail"]
         == "A company with this ticker already exists"
     )
+
+import pytest
+
+
+@pytest.mark.parametrize("name", ["string", "test", "example", "  STRING  "])
+def test_placeholder_company_name_is_rejected(client, name):
+    response = client.post(
+        "/companies",
+        json={
+            "ticker": "ABCD",
+            "name": name,
+            "sector": "Technology",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("ticker", ["STRING", "TEST", "EXAMPLE"])
+def test_placeholder_ticker_is_rejected(client, ticker):
+    response = client.post(
+        "/companies",
+        json={
+            "ticker": ticker,
+            "name": "Valid Company Corporation",
+            "sector": "Technology",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_company_name_whitespace_is_normalized(client):
+    response = client.post(
+        "/companies",
+        json={
+            "ticker": "ABCD",
+            "name": "  Example Technologies Inc.  ",
+            "sector": "Technology",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "Example Technologies Inc."

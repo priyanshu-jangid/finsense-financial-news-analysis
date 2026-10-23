@@ -89,3 +89,8 @@ class IngestionStatusResponse(BaseModel):
     is_scheduler_running: bool
     interval_hours: int
     checkpoints: list[CheckpointStatusResponse]
+    # Manual ingestion status (idle, queued, running, success, partial_failure, failure)
+    manual_job_status: str
+    manual_job_total_fetched: int | None = None
+    manual_job_total_persisted: int | None = None
+    manual_job_errors: list[str] | None = None

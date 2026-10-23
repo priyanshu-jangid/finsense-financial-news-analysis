@@ -1,6 +1,6 @@
 """API endpoints for news articles and ingestion management."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
@@ -11,6 +11,7 @@ from backend.app.schemas.article import (
     CheckpointStatusResponse,
     IngestionStatusResponse,
     IngestionTriggerResponse,
+    IngestionFeedResultResponse,
     PaginatedArticlesResponse,
 )
 from backend.app.services.article_service import (
@@ -21,7 +22,7 @@ from backend.app.services.article_service import (
 )
 from backend.app.services.company_service import get_company
 from backend.app.services.news_ingestion import NewsIngestionService
-from backend.app.tasks.news_scheduler import is_scheduler_running
+from backend.app.tasks.news_scheduler import is_scheduler_running, run_manual_ingestion, _manual_job_state
 from shared.models import User
 
 router = APIRouter(
@@ -111,48 +112,54 @@ def get_company_news(
 @router.post(
     "/ingest",
     response_model=IngestionTriggerResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Trigger automated news ingestion",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger manual news ingestion",
 )
-def trigger_news_ingestion(
+async def trigger_news_ingestion(
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Authenticated endpoint to trigger financial news ingestion across company and broad feeds.
-    Returns 503 Service Unavailable when live news ingestion is disabled.
+    """Authenticated endpoint to trigger news ingestion asynchronously.
+    Returns 202 when the job is queued, 409 if another ingestion job is already in progress.
     """
-
     # Operator allowlist enforcement
     from backend.app.core.config import settings
     allowed_emails = [e.strip().lower() for e in settings.INGESTION_OPERATOR_EMAILS.split(',') if e.strip()]
     if not allowed_emails or current_user.email.lower() not in allowed_emails:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not authorized to trigger ingestion")
 
-    service = NewsIngestionService()
-    result = service.ingest_all(db)
+    # Queue background task; it will manage lock acquisition and job state
+    _manual_job_state.set("queued")
+    try:
+        background_tasks.add_task(run_manual_ingestion, lock_already_acquired=False)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to schedule ingestion job")
 
+    # Immediate queued response
     return IngestionTriggerResponse(
-        status=result.status,
-        total_fetched=result.total_fetched,
-        total_persisted=result.total_persisted,
-        company_feed={
-            "feed_type": result.company_feed.feed_type,
-            "articles_fetched": result.company_feed.articles_fetched,
-            "articles_persisted": result.company_feed.articles_persisted,
-            "articles_deduplicated": result.company_feed.articles_deduplicated,
-            "status": result.company_feed.status,
-            "errors": result.company_feed.errors,
-        },
-        broad_feed={
-            "feed_type": result.broad_feed.feed_type,
-            "articles_fetched": result.broad_feed.articles_fetched,
-            "articles_persisted": result.broad_feed.articles_persisted,
-            "articles_deduplicated": result.broad_feed.articles_deduplicated,
-            "status": result.broad_feed.status,
-            "errors": result.broad_feed.errors,
-        },
-        errors=result.errors,
+        status="queued",
+        total_fetched=0,
+        total_persisted=0,
+        company_feed=IngestionFeedResultResponse(
+            feed_type="company",
+            articles_fetched=0,
+            articles_persisted=0,
+            articles_deduplicated=0,
+            status="queued",
+            errors=[],
+        ),
+        broad_feed=IngestionFeedResultResponse(
+            feed_type="broad",
+            articles_fetched=0,
+            articles_persisted=0,
+            articles_deduplicated=0,
+            status="queued",
+            errors=[],
+        ),
+        errors=[],
     )
+
 
 
 @router.get(
@@ -163,12 +170,18 @@ def trigger_news_ingestion(
 def get_ingestion_status(
     db: Session = Depends(get_db),
 ):
-    """Retrieve the status of news ingestion checkpoints and the scheduler."""
+    """Retrieve the status of news ingestion checkpoints, scheduler, and manual job info."""
     checkpoints = get_checkpoints_status(db)
+    from backend.app.tasks.news_scheduler import get_manual_job_info
+    manual_info = get_manual_job_info()
     return IngestionStatusResponse(
         is_scheduler_running=is_scheduler_running(),
         interval_hours=settings.INGESTION_INTERVAL_HOURS,
         checkpoints=[
             CheckpointStatusResponse.model_validate(cp) for cp in checkpoints
         ],
+        manual_job_status=manual_info.get("status", "idle"),
+        manual_job_total_fetched=manual_info.get("total_fetched"),
+        manual_job_total_persisted=manual_info.get("total_persisted"),
+        manual_job_errors=manual_info.get("errors"),
     )

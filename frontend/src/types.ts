@@ -3,6 +3,7 @@ export interface Company {
   ticker: string;
   name: string;
   sector?: string | null;
+  is_sp500: boolean;
 }
 
 export interface DailyTrendPoint {
@@ -100,4 +101,8 @@ export interface IngestionStatus {
   is_scheduler_running: boolean;
   interval_hours: number;
   checkpoints: IngestionCheckpoint[];
+  manual_job_status: string;
+  manual_job_total_fetched: number | null;
+  manual_job_total_persisted: number | null;
+  manual_job_errors: string[] | null;
 }
