@@ -112,7 +112,7 @@ export const NewsPage: React.FC = () => {
     loadArticles(1);
   };
 
-  const pollRef = React.useRef<NodeJS.Timeout | null>(null);
+  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearPolling = () => {
     if (pollRef.current) {
@@ -148,7 +148,7 @@ export const NewsPage: React.FC = () => {
           }
           loadArticles(1);
         }
-      } catch (e) {
+      } catch {
         clearPolling();
       }
     }, 3000);
@@ -359,16 +359,16 @@ export const NewsPage: React.FC = () => {
           selectedCompanyId
             ? `Articles associated with ${companies.find((c) => c.id === selectedCompanyId)?.name || 'Company'}`
             : searchQuery
-            ? `Articles matching "${searchQuery}"`
-            : 'All Indexed News'
+              ? `Articles matching "${searchQuery}"`
+              : 'All Indexed News'
         }
         subtitle={`Showing ${articles.length} of ${totalCount} articles found`}
         emptyMessage={
           searchQuery
             ? `No articles match the keyword "${searchQuery}".`
             : selectedCompanyId
-            ? 'No articles associated with this company in the database.'
-            : 'No financial articles have been stored in the database yet. Trigger automated news ingestion to populate live coverage.'
+              ? 'No articles associated with this company in the database.'
+              : 'No financial articles have been stored in the database yet. Trigger automated news ingestion to populate live coverage.'
         }
         isLoading={loading}
       />

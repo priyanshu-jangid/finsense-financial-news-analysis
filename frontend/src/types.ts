@@ -106,3 +106,89 @@ export interface IngestionStatus {
   manual_job_total_persisted: number | null;
   manual_job_errors: string[] | null;
 }
+
+// ---------------------------------------------------------------------------
+// Watchlist Overview (Stage 3)
+// ---------------------------------------------------------------------------
+
+export interface OverviewWindow {
+  start: string;
+  end: string;
+  article_count: number;
+  average_score: number | null;
+}
+
+export interface OverviewLabelCounts {
+  positive: number;
+  neutral: number;
+  negative: number;
+}
+
+export type ShiftStatus = 'insufficient_data' | 'stable' | 'improving' | 'deteriorating';
+
+export interface WatchlistCompanyOverview {
+  company_id: number;
+  ticker: string;
+  name: string;
+  sector: string | null;
+  current_window: OverviewWindow;
+  previous_window: OverviewWindow;
+  score_delta: number | null;
+  shift_status: ShiftStatus;
+  current_label_counts: OverviewLabelCounts;
+  negative_article_count: number;
+  latest_article_published_at: string | null;
+}
+
+export interface WatchlistOverviewTotals {
+  companies_tracked: number;
+  companies_with_sentiment_shift: number;
+  negative_article_count: number;
+}
+
+export interface WatchlistOverviewResponse {
+  user_id: number;
+  as_of: string;
+  window_days: number;
+  min_articles_per_window: number;
+  shift_threshold: number;
+  companies: WatchlistCompanyOverview[];
+  totals: WatchlistOverviewTotals;
+}
+
+// ---------------------------------------------------------------------------
+// Personalized Feed (Stage 4a)
+// ---------------------------------------------------------------------------
+
+export interface FeedSentimentResult {
+  company_id: number;
+  company_ticker: string;
+  company_name: string;
+  label: string;
+  score: number;
+  confidence: number;
+  model_used: string;
+}
+
+export interface FeedArticle {
+  id: number;
+  title: string;
+  url: string;
+  summary: string | null;
+  published_at: string | null;
+  fetched_at: string;
+  provider_id: string | null;
+  image_url: string | null;
+  author: string | null;
+  source: Source;
+  entities: ArticleEntity[];
+  matched_companies: FeedSentimentResult[];
+}
+
+export interface PaginatedFeed {
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  items: FeedArticle[];
+}

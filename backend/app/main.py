@@ -5,6 +5,7 @@ from backend.app.core.config import settings
 from backend.app.routers.articles import router as articles_router
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.companies import router as companies_router
+from backend.app.routers.feed import router as feed_router
 from backend.app.routers.watchlists import router as watchlists_router
 from backend.app.tasks.news_scheduler import shutdown_news_scheduler, start_news_scheduler
 from backend.app.tasks.sentiment_scheduler import start_sentiment_scheduler, shutdown_sentiment_scheduler
@@ -43,6 +44,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(companies_router)
 app.include_router(watchlists_router)
+app.include_router(feed_router)
 app.include_router(articles_router)
 
 

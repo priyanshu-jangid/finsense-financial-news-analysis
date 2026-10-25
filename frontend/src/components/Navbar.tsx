@@ -132,6 +132,21 @@ export const Navbar: React.FC = () => {
             >
               Watchlist
             </NavLink>
+            <NavLink
+              to="/feed"
+              style={({ isActive }) => ({
+                padding: '6px 12px',
+                fontSize: '13px',
+                fontWeight: isActive ? 600 : 500,
+                color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                backgroundColor: isActive ? 'var(--accent-subtle)' : 'transparent',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                transition: 'all 0.15s ease',
+              })}
+            >
+              Feed
+            </NavLink>
           </nav>
         </div>
 

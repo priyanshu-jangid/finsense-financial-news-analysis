@@ -1,6 +1,6 @@
 // src/api/watchlist.ts
 import api from './client';
-import type { WatchlistItem } from '../types';
+import type { WatchlistItem, WatchlistOverviewResponse } from '../types';
 
 export const fetchUserWatchlist = async (userId: number): Promise<WatchlistItem[]> => {
   const response = await api.get<WatchlistItem[]>(`/users/${userId}/watchlist`);
@@ -16,4 +16,9 @@ export const addToWatchlist = async (userId: number, companyId: number): Promise
 
 export const removeFromWatchlist = async (userId: number, companyId: number): Promise<void> => {
   await api.delete(`/users/${userId}/watchlist/${companyId}`);
+};
+
+export const fetchWatchlistOverview = async (userId: number): Promise<WatchlistOverviewResponse> => {
+  const response = await api.get<WatchlistOverviewResponse>(`/users/${userId}/watchlist/overview`);
+  return response.data;
 };

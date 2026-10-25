@@ -7,6 +7,7 @@ import type { Company, WatchlistItem } from '../types';
 import { PageHeader } from '../components/PageHeader';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
+import { WatchlistOverviewPanel } from '../components/WatchlistOverviewPanel';
 import {
   IconSearch,
   IconCheck,
@@ -161,7 +162,11 @@ export const WatchlistPage: React.FC = () => {
         </div>
       )}
 
-      {/* Control Bar: Search & Tabs */}
+      {/* Sentiment Shift Overview — shown only when authenticated */}
+      {isAuthenticated && user?.id && watchlist.length > 0 && (
+        <WatchlistOverviewPanel userId={user.id} />
+      )}
+
       <div
         className="fin-card"
         style={{
