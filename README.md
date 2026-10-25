@@ -1,224 +1,473 @@
-# FinSense: Automated Financial News Ingestion (Milestone 2)
+# FinSense — Financial News Aggregation & Sentiment Analysis Platform
 
-FinSense is an intelligent financial news aggregation and sentiment analysis platform designed to help users track high-signal financial news, macroeconomic updates, and company-specific disclosures for companies in their watchlists.
+FinSense is a financial news aggregation and sentiment analysis platform designed to help users understand market-related news, analyze company sentiment, and track changes in financial sentiment over time.
 
-This milestone implements **Automated Financial News Ingestion** (Milestone 2), integrating external market news feeds, multi-factor company matching, robust deduplication, incremental checkpointing, public article retrieval APIs, and a 3-hour automated scheduler.
+The platform collects financial news from an external news provider, identifies relevant companies, removes duplicate articles, analyzes sentiment using FinBERT, and presents the resulting insights through a web-based dashboard.
 
----
+## Table of Contents
 
-## 1. Architecture Overview
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [System Architecture](#system-architecture)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Local Setup](#local-setup)
+- [Environment Variables](#environment-variables)
+- [Running the Application](#running-the-application)
+- [Database Migrations](#database-migrations)
+- [Running Tests](#running-tests)
+- [API Documentation](#api-documentation)
+- [Security Notes](#security-notes)
+- [Troubleshooting](#troubleshooting)
+- [Future Enhancements](#future-enhancements)
 
+## Overview
+
+Financial markets react to company announcements, earnings reports, geopolitical developments, macroeconomic indicators, and other news events. However, tracking news across multiple sources and understanding its potential relationship with market sentiment can be challenging.
+
+FinSense addresses this problem by combining financial news ingestion, company matching, sentiment analysis, and historical sentiment tracking in a single application.
+
+The platform is intended for financial news research and analytical exploration. Its sentiment classifications are informational signals, not guaranteed predictions of stock-price movements or investment recommendations.
+
+## Key Features
+
+### 1. Financial News Aggregation
+
+- Integrates with the Marketaux financial news API.
+- Retrieves financial news through a centralized ingestion service.
+- Supports controlled live ingestion through configuration flags.
+- Normalizes incoming articles before storing them.
+
+### 2. Company Matching and Deduplication
+
+- Identifies companies associated with incoming news.
+- Applies company-matching guardrails to reduce irrelevant associations.
+- Deduplicates articles to reduce repeated news entries.
+- Maintains canonical article records in the database.
+
+### 3. AI-Powered Sentiment Analysis
+
+- Uses the FinBERT model for financial sentiment classification.
+- Supports positive, negative, and neutral sentiment labels.
+- Validates model outputs before persisting analysis results.
+- Stores sentiment analyses for subsequent retrieval and aggregation.
+
+### 4. Sentiment Dashboard and Analytics
+
+- Presents financial news and sentiment information through a web interface.
+- Provides company-level sentiment information and historical views.
+- Supports exploration of sentiment changes over time.
+
+### 5. User Accounts and Watchlists
+
+- Provides user registration and authentication functionality.
+- Supports company watchlists.
+- Enforces ownership checks for user-specific watchlists.
+- Supports a personalized news feed based on watchlist interests.
+
+### 6. Sentiment Shift Analysis
+
+- Helps users explore changes in company sentiment over time.
+- Combines persisted sentiment information with historical analysis.
+- Provides a foundation for investigating why a company's news sentiment may have changed.
+
+### 7. Controlled Background Ingestion
+
+- Supports scheduled news ingestion.
+- Uses configuration flags to control scheduler startup and live API access.
+- Keeps live news ingestion disabled by default for safer local development.
+
+## System Architecture
+
+```text
+                 ┌────────────────────────┐
+                 │   Marketaux News API   │
+                 └────────────┬───────────┘
+                              │
+                              ▼
+                 ┌────────────────────────┐
+                 │  News Ingestion Service│
+                 └────────────┬───────────┘
+                              │
+                              ▼
+                 ┌────────────────────────┐
+                 │ Normalization, Company │
+                 │ Matching & Deduplication│
+                 └────────────┬───────────┘
+                              │
+                              ▼
+                 ┌────────────────────────┐
+                 │    PostgreSQL DB       │
+                 │ Articles & Companies   │
+                 └────────────┬───────────┘
+                              │
+                              ▼
+                 ┌────────────────────────┐
+                 │   FinBERT Sentiment    │
+                 │       Analysis         │
+                 └────────────┬───────────┘
+                              │
+                              ▼
+                 ┌────────────────────────┐
+                 │ Persisted Sentiment &  │
+                 │ Historical Analytics   │
+                 └────────────┬───────────┘
+                              │
+                              ▼
+                 ┌────────────────────────┐
+                 │ FastAPI Backend & REST │
+                 │          APIs          │
+                 └────────────┬───────────┘
+                              │
+                              ▼
+                 ┌────────────────────────┐
+                 │ React + TypeScript UI  │
+                 └────────────────────────┘
 ```
-                      +-----------------------------+
-                      |   Marketaux Financial API   |
-                      +--------------+--------------+
-                                     |  (HTTP JSON, Max 3 articles/call)
-                                     v
-                 +---------------------------------------+
-                 |    NewsIngestionService Orchestrator  |
-                 +-------------------+-------------------+
-                                     |
-         +---------------------------+---------------------------+
-         |                                                       |
-         v                                                       v
-+-------------------------------+               +-------------------------------+
-| Company-Specific News Flow    |               | Broad Macroeconomic News Flow |
-| - Query tracked tickers       |               | - RBI, SEBI, Inflation, Repo  |
-| - Batch symbols (up to 5/req) |               | - Broad Indian market updates |
-+---------------+---------------+               +---------------+---------------+
-                |                                               |
-                +-----------------------+-----------------------+
-                                        |
-                                        v
-                 +---------------------------------------+
-                 |      CompanyMatcher & Guardrails      |
-                 | - Provider entity symbol matching     |
-                 | - Headline & summary matching         |
-                 | - Short-ticker cashtag ambiguity check|
-                 +----------------------+----------------+
-                                        |
-                                        v
-                 +---------------------------------------+
-                 |    Deduplication & Canonicalization   |
-                 | - URL tracking parameter stripping    |
-                 | - Provider UUID indexing              |
-                 | - Publisher Source deduplication      |
-                 +----------------------+----------------+
-                                        |
-                                        v
-                 +---------------------------------------+
-                 |         PostgreSQL Database           |
-                 | - articles                            |
-                 | - article_entities (relevance_score)  |
-                 | - sources                             |
-                 | - ingestion_checkpoints               |
-                 +----------------------+----------------+
-                                        |
-         +------------------------------+------------------------------+
-         |                                                             |
-         v                                                             v
-+----------------------------------+         +----------------------------------+
-|      FastAPI REST Router         |         |     APScheduler In-Process Job   |
-| - GET /articles                  |         | - Runs every 3 hours             |
-| - GET /articles/market           |         | - Non-overlapping concurrency    |
-| - GET /articles/company/{id}     |         | - Clean startup & shutdown       |
-| - POST /articles/ingest (Auth)   |         +----------------------------------+
-| - GET /articles/ingestion-status |
-+----------------------------------+
+
+The backend exposes API endpoints consumed by the frontend. PostgreSQL stores application data, while FinBERT performs financial sentiment classification.
+
+## Technology Stack
+
+| Component | Technologies |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| Routing and API integration | React Router, Axios |
+| Backend | Python, FastAPI, Uvicorn |
+| Database | PostgreSQL |
+| ORM and migrations | SQLAlchemy, Alembic |
+| Validation | Pydantic |
+| Sentiment analysis | Hugging Face Transformers, PyTorch, ProsusAI/finbert |
+| Financial news provider | Marketaux API |
+| Background scheduling | APScheduler |
+| Testing | pytest |
+| Version control | Git, GitHub |
+
+## Project Structure
+
+The following is a high-level overview of the repository. Exact filenames may evolve as development continues.
+
+```text
+FinSense/
+├── backend/
+│   └── app/
+│       ├── core/          # Configuration and security
+│       ├── services/      # Business logic and data services
+│       ├── tasks/         # Background tasks and scheduling
+│       └── main.py        # FastAPI application entry point
+├── frontend/
+│   ├── src/
+│   │   ├── components/    # Reusable UI components
+│   │   ├── pages/         # Application pages
+│   │   └── api/           # Frontend API utilities
+│   ├── .env.example       # Frontend configuration template
+│   └── package.json
+├── nlp/
+│   └── pipeline/
+│       └── sentiment.py   # Sentiment engine
+├── shared/                # Shared application contracts
+├── tests/                 # Automated tests
+├── .env.example           # Backend/root configuration template
+└── README.md
 ```
 
----
+## Prerequisites
 
-## 2. News Provider Evaluation: Marketaux
+Install the following before running the project:
 
-### Capabilities
-- **Entity Identification:** Maps news stories to over 200,000 global financial entities (equities, ETFs, indices, currencies).
-- **Sentiment & Entity Tags:** Provides structured entity arrays including symbol, match score, and sentiment highlights.
-- **Geographic Filtering:** Supports ISO country codes (e.g. `countries=in` for India).
-- **Date Range Retrieval:** Supports `published_after` and `published_before` in ISO 8601 UTC format.
+- Python 3.11 or another Python version supported by the project's dependencies.
+- Node.js and npm.
+- PostgreSQL.
+- Git.
+- A Marketaux account and API token for live news ingestion.
 
-### Free-Tier Limitations
-- **Daily Quota:** 100 API requests per day.
-- **Articles per Request:** Limited to **3 articles** per request on the free tier.
-- **Rate Limits:** HTTP 429 is returned if the rate limit is exceeded.
+The application can be developed locally without enabling live news ingestion. Database connectivity is still required for normal database-backed functionality.
 
-### Indian Equity & NSE/BSE Coverage
-- **Symbol Formats:** Indian equities generally adhere to `.NS` (National Stock Exchange) or `.BO` (Bombay Stock Exchange) suffixes (e.g. `CANBK.NS`, `RELIANCE.BO`).
-- **Coverage Scope:** Large-cap Indian equities (Nifty 50 / Sensex 30) have good coverage. Mid-cap and small-cap disclosures are comparatively sparse.
-- **System Resilience:**
-  - `CompanyMatcher` strips exchange suffixes (e.g., matching `RELIANCE.NS` against local database ticker `RELIANCE`).
-  - Broad macroeconomic news (`countries=in` with keyword filters for RBI, SEBI, and repo rate) captures systemic stories even when ticker-specific news is quiet.
-  - Unsupported or unmapped tickers are safely logged without crashing the pipeline.
+## Local Setup
 
----
+### 1. Clone the repository
 
-## 3. Environment Configuration
-
-The application reads configuration from environment variables via Pydantic Settings (`.env` file).
-
-### Required & Configurable Variables
-
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql+psycopg://...` |
-| `JWT_SECRET_KEY` | Secret key for JWT signing | *(Required)* |
-| `MARKETAUX_API_TOKEN` | API token from Marketaux | `""` (Empty triggers mock/error) |
-| `MARKETAUX_BASE_URL` | Marketaux API endpoint | `https://api.marketaux.com/v1` |
-| `NEWS_REQUEST_TIMEOUT_SECONDS`| Network request timeout | `10.0` |
-| `NEWS_DEFAULT_LOOKBACK_HOURS` | Historical lookback for first ingestion run | `24` |
-| `NEWS_CHECKPOINT_OVERLAP_MINUTES`| Overlap window to catch delayed articles | `30` |
-| `INGESTION_INTERVAL_HOURS` | Frequency of scheduled background job | `3` |
-| `ENABLE_SCHEDULER` | Flag to enable/disable automated scheduler | `true` |
-
-> [!NOTE]
-> See `.env.example` for a sample configuration template. Never commit your actual `.env` file or real API tokens.
-
----
-
-## 4. Database Setup & Migrations
-
-Database tables are managed with Alembic.
-
-To apply all migrations to PostgreSQL:
 ```bash
-./.venv/bin/alembic upgrade head
+git clone https://github.com/priyanshu-jangid/finsense-financial-news-analysis.git
+cd finsense-financial-news-analysis
 ```
 
-### Milestone 2 Schema Additions:
-- `articles.provider_id` (VARCHAR 100, indexed)
-- `articles.image_url` (VARCHAR 1000, nullable)
-- `articles.author` (VARCHAR 255, nullable)
-- `article_entities.relevance_score` (FLOAT, nullable)
-- `ingestion_checkpoints` table (tracks `feed_type`, `last_successful_published_at`, `last_run_at`, `status`, `articles_fetched`, `articles_persisted`, `error_message`).
+### 2. Create a Python virtual environment
 
----
+On Linux or macOS:
 
-## 5. Starting the Backend
-
-Start the FastAPI application with Uvicorn:
 ```bash
-./.venv/bin/uvicorn backend.app.main:app --reload
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-Interactive API documentation (Swagger UI) is available at:
-`http://127.0.0.1:8000/docs`
+On Windows PowerShell:
 
----
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+```
 
-## 6. Ingestion Mechanics
+### 3. Install backend dependencies
 
-### A. Company-Specific News
-- Identifies distinct companies tracked in PostgreSQL.
-- Queries Marketaux in batches of up to 5 symbols using the `symbols` parameter and `filter_entities=true`.
-- Matches articles against tracked companies using provider entity symbols, headlines, and summaries.
+From the project root, install the dependencies using the repository's requirements file:
 
-### B. Broad Macroeconomic News
-- Queries Marketaux with `countries=in` and curated topics (e.g. RBI monetary policy, SEBI regulations, inflation, repo rates, corporate earnings).
-- Stores macroeconomic news independently of user watchlists.
-
-### C. Deduplication & Idempotency
-- **Canonical URL:** URLs are normalized by lowercasing scheme/host, removing trailing slashes, stripping tracking parameters (`utm_*`, `ref`, `fbclid`, `gclid`), and sorting remaining query params.
-- **Provider UUID:** Unique identifier from Marketaux is indexed and checked before insertion.
-- **Relationship Enrichment:** If an existing article is found, new company relationships (`ArticleEntity`) are attached without duplicating the article record.
-- **Source Reuse:** Reuses existing `Source` records by normalized domain instead of creating duplicate publishers.
-
-### D. Checkpoint Management
-- Checkpoints are persisted in `ingestion_checkpoints` for both `company` and `broad` feeds.
-- If a provider request fails, the checkpoint is **not** advanced.
-- On partial failure, the checkpoint only advances to the newest publication timestamp among successfully persisted articles.
-- The default lookback window (24 hours) prevents unbounded backfills on the initial run.
-
----
-
-## 7. Automated 3-Hour Scheduler
-
-- Configured using APScheduler `BackgroundScheduler` in `backend/app/tasks/news_scheduler.py`.
-- **Interval:** Runs every 3 hours (`INGESTION_INTERVAL_HOURS=3`).
-- **Non-Overlapping:** Uses a concurrency thread lock `_job_lock` and `max_instances=1` to guarantee jobs never run concurrently.
-- **FastAPI Lifespan:** Scheduler is started on application startup and cleanly stopped on application shutdown via FastAPI's `lifespan` handler.
-- **Production Note:** In a multi-worker deployment (e.g. multiple Gunicorn/Uvicorn workers), designate a single worker or dedicated process for the scheduler (`ENABLE_SCHEDULER=false` on web workers) to prevent duplicate cron jobs.
-
----
-
-## 8. API Endpoints
-
-### News Retrieval Endpoints (Public, reads from PostgreSQL)
-1. **List Articles (Paginated):**
-   ```http
-   GET /articles?page=1&page_size=20&search=earnings
-   ```
-2. **Company-Specific News:**
-   ```http
-   GET /articles/company/{company_id}?page=1&page_size=20
-   ```
-3. **Broad Market Feed:**
-   ```http
-   GET /articles/market?page=1&page_size=20
-   ```
-4. **Ingestion Checkpoint & Scheduler Status:**
-   ```http
-   GET /articles/ingestion-status
-   ```
-
-### News Ingestion Trigger (Authenticated)
-5. **Trigger Ingestion Run:**
-   ```http
-   POST /articles/ingest
-   Authorization: Bearer <access_token>
-   ```
-
----
-
-## 9. Running Tests
-
-Run the test suite using pytest:
 ```bash
-./.venv/bin/pytest -v
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-### Test Coverage Highlights:
-- **`tests/test_news_provider.py`:** Tests Marketaux HTTP client, authentication handling, 401 errors, 429 rate limits, network timeouts, malformed JSON, and secret redaction.
-- **`tests/test_news_ingestion.py`:** Tests URL canonicalization, timestamp parsing, article persistence, provider ID and canonical URL deduplication, multi-company matching, short-ticker ambiguity guards, failed provider checkpoint handling, and idempotency.
-- **`tests/test_articles_api.py`:** Tests pagination, read-path isolation from external provider, company news filtering, market news filtering, authentication enforcement on ingestion trigger, and status endpoint.
-- **`tests/test_news_scheduler.py`:** Tests scheduler lifecycle, configured interval, background task execution, and non-overlapping execution lock.
-- **Existing Tests:** All 33 pre-existing tests (`test_auth.py`, `test_companies.py`, `test_database.py`, `test_models.py`, `test_security.py`, `test_watchlists.py`) continue to pass.
+If the requirements file is located in a subdirectory in your checkout, use its actual path instead.
+
+### 4. Configure PostgreSQL
+
+Create a PostgreSQL database and a dedicated application user. For example, run the following as a PostgreSQL administrator:
+
+```sql
+CREATE USER finsense_user WITH PASSWORD 'replace_with_a_local_password';
+CREATE DATABASE finsense OWNER finsense_user;
+```
+
+Use your own local password. Do not commit it to Git.
+
+### 5. Configure backend environment variables
+
+Create a local environment file from the supplied template:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and configure the database connection, JWT secret, and other settings required for your environment.
+
+Keep `.env` local and never commit it.
+
+### 6. Configure frontend environment variables
+
+Create the frontend environment file:
+
+```bash
+cp frontend/.env.example frontend/.env
+```
+
+The local frontend configuration should point to the FastAPI backend running at `http://localhost:8000`.
+
+### 7. Apply database migrations
+
+Activate the Python virtual environment and run the migration command from the project root:
+
+```bash
+python -m alembic upgrade head
+```
+
+This applies the database schema migrations managed by Alembic.
+
+If your project configures Alembic to run from a different working directory, follow that configuration.
+
+## Environment Variables
+
+The following variables are defined in the project's environment templates. Use placeholders in documentation and real values only in your local environment.
+
+| Variable | Purpose | Example or default |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+psycopg://finsense_user:your_password@localhost:5432/finsense` |
+| `JWT_SECRET_KEY` | Secret used for JWT-related security | `your_jwt_secret_key_change_me` |
+| `MARKETAUX_API_TOKEN` | Authentication for Marketaux API requests | `your_marketaux_token_here` |
+| `INGESTION_OPERATOR_EMAILS` | Email addresses permitted to trigger manual ingestion | `your-operator@example.com` |
+| `INGESTION_INTERVAL_HOURS` | Configured ingestion interval in hours | `3` |
+| `ENABLE_SCHEDULER` | Enables background scheduler startup when other required conditions are met | `false` |
+| `ENABLE_LIVE_NEWS` | Controls live news access | `false` |
+| `FINBERT_MODEL_NAME` | Hugging Face model used for sentiment classification | `ProsusAI/finbert` |
+| `CORS_ORIGINS` | Allowed frontend origins for cross-origin requests | `http://localhost:5173` |
+| `VITE_API_BASE_URL` | Backend API base URL used by the frontend | `http://localhost:8000` |
+
+### Important configuration notes
+
+- `ENABLE_LIVE_NEWS=false` keeps live news access disabled.
+- `ENABLE_SCHEDULER=false` prevents scheduler startup.
+- In the current application configuration, the scheduler starts only when both `ENABLE_SCHEDULER` and `ENABLE_LIVE_NEWS` are enabled.
+- Live ingestion requires a valid Marketaux API token.
+- Generate a strong, unique JWT secret for your local environment. Never use the example value in production.
+- `INGESTION_OPERATOR_EMAILS` should contain the email addresses of authorized ingestion operators.
+- If you change the backend port or frontend origin, update the corresponding configuration values.
+
+## Running the Application
+
+Run the backend and frontend in separate terminals.
+
+### Terminal 1 — Start the backend
+
+From the project root, with the Python virtual environment activated:
+
+```bash
+uvicorn backend.app.main:app --reload
+```
+
+The backend should be available at:
+
+- API base URL: http://localhost:8000
+- Interactive API documentation: http://localhost:8000/docs
+- Alternative API documentation: http://localhost:8000/redoc
+
+### Terminal 2 — Start the frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the frontend at:
+
+http://localhost:5173
+
+The frontend communicates with the backend through `VITE_API_BASE_URL`.
+
+### First-time sentiment model initialization
+
+FinBERT may download its model files from Hugging Face when first initialized. This can take time and require an internet connection. Subsequent runs may reuse the locally cached model files.
+
+### Enabling live news ingestion
+
+Only enable live ingestion after verifying your API token, database configuration, and operator authorization.
+
+In your local `.env`, configure the appropriate values:
+
+```dotenv
+ENABLE_LIVE_NEWS=true
+ENABLE_SCHEDULER=false
+```
+
+This allows live news functionality without automatically starting the scheduler, provided the relevant ingestion endpoints are used.
+
+To enable scheduled ingestion as well, set:
+
+```dotenv
+ENABLE_LIVE_NEWS=true
+ENABLE_SCHEDULER=true
+```
+
+Restart the backend after changing environment variables. Be mindful of API usage limits.
+
+## Database Migrations
+
+Apply pending migrations:
+
+```bash
+python -m alembic upgrade head
+```
+
+Check the current migration revision:
+
+```bash
+python -m alembic current
+```
+
+Inspect migration history:
+
+```bash
+python -m alembic history
+```
+
+These commands help verify that the local database schema is aligned with the application's migration history.
+
+## Running Tests
+
+From the project root, activate the virtual environment and run:
+
+```bash
+python -m pytest -q
+```
+
+For additional diagnostic output:
+
+```bash
+python -m pytest -v
+```
+
+Tests that require PostgreSQL or external services may need their corresponding local configuration. Keep live API access disabled unless a test explicitly requires it.
+
+## API Documentation
+
+Once the backend is running, FastAPI provides interactive API documentation at:
+
+- **Swagger UI:** http://localhost:8000/docs
+- **ReDoc:** http://localhost:8000/redoc
+
+Use these pages to explore available endpoints, inspect request and response schemas, and test supported API operations.
+
+## Security Notes
+
+Security is an important part of the development and deployment process.
+
+- Never commit `.env` files or actual API tokens.
+- Keep `.env.example` limited to dummy values and non-sensitive defaults.
+- Rotate credentials immediately if they are accidentally exposed.
+- Removing a secret from the latest file does not remove it from previous Git commits.
+- Do not expose JWT secrets, database passwords, or provider tokens in logs, screenshots, issue reports, or public documentation.
+- Restrict manual ingestion endpoints to authorized operators.
+- Configure CORS origins explicitly for the environment in which the application runs.
+- Keep live news ingestion and scheduled jobs disabled until they are intentionally configured.
+- Review secret handling before deploying the application to a public server.
+
+## Troubleshooting
+
+### Backend cannot connect to PostgreSQL
+
+- Confirm that PostgreSQL is running.
+- Check the database name, username, password, host, and port in `DATABASE_URL`.
+- Verify that the database and application user exist.
+- Confirm that database migrations have been applied.
+
+### Frontend cannot reach the backend
+
+- Ensure the backend is running at `http://localhost:8000`.
+- Check `VITE_API_BASE_URL` in `frontend/.env`.
+- Verify that `CORS_ORIGINS` includes the frontend origin.
+- Restart the Vite development server after changing environment variables.
+
+### Live news returns no articles
+
+- Check `ENABLE_LIVE_NEWS`.
+- Verify that `MARKETAUX_API_TOKEN` contains a valid, active token.
+- Check the backend logs for provider errors or API rate limits.
+- Confirm that the configured ingestion operator is authorized where required.
+
+### Sentiment analysis takes a long time on first run
+
+- Allow time for the FinBERT model to initialize and download if necessary.
+- Confirm that the machine has sufficient memory and an internet connection for initial model retrieval.
+- Check the backend logs for model-loading or dependency errors.
+
+### Database schema errors
+
+Run:
+
+```bash
+python -m alembic current
+python -m alembic history
+```
+
+If the database is behind the migration head, apply the pending migrations after confirming that the configured database is the intended local database.
+
+## Future Enhancements
+
+Potential areas for further development include:
+
+- Event classification for financial news.
+- News relevance and impact ranking.
+- More detailed explanations of sentiment shifts.
+- Personalized alerts for watched companies.
+- Expanded historical analytics and visualization.
+- Production deployment, monitoring, and operational hardening.
+
+These are development directions rather than a guarantee that every feature is currently implemented.
+
+## Disclaimer
+
+FinSense is a software project for financial news analysis and research. Its sentiment outputs may be incomplete or inaccurate and should not be treated as financial advice, investment recommendations, or reliable predictions of market movements.
+
+## License
+
+Add a license file and specify the license here if you intend to distribute the project under an open-source license.
